@@ -66,6 +66,13 @@ public final class ContentType {
       PARAMETER_ODATA_METADATA, VALUE_ODATA_METADATA_FULL);
 
   public static final ContentType APPLICATION_XML = new ContentType(APPLICATION, "xml", null);
+  public static final ContentType XML = create(ContentType.APPLICATION_XML,
+          PARAMETER_ODATA_METADATA, VALUE_ODATA_METADATA_MINIMAL);
+  public static final ContentType XML_NO_METADATA = create(ContentType.APPLICATION_XML,
+          PARAMETER_ODATA_METADATA, VALUE_ODATA_METADATA_NONE);
+  public static final ContentType XML_FULL_METADATA = create(ContentType.APPLICATION_XML,
+          PARAMETER_ODATA_METADATA, VALUE_ODATA_METADATA_FULL);
+
   public static final ContentType APPLICATION_ATOM_XML = new ContentType(APPLICATION, "atom+xml", null);
   public static final ContentType APPLICATION_ATOM_XML_ENTRY = create(APPLICATION_ATOM_XML, "type", "entry");
   public static final ContentType APPLICATION_ATOM_XML_ENTRY_UTF8 = create(APPLICATION_ATOM_XML_ENTRY,

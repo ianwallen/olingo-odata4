@@ -27,13 +27,13 @@ public class ContentTypeHelper {
   }
 
   public static boolean isODataMetadataNone(final ContentType contentType) {
-    return contentType.isCompatible(ContentType.APPLICATION_JSON)
+    return (contentType.isCompatible(ContentType.APPLICATION_JSON) || contentType.isCompatible(ContentType.APPLICATION_XML))
         && ContentType.VALUE_ODATA_METADATA_NONE.equalsIgnoreCase(
             contentType.getParameter(ContentType.PARAMETER_ODATA_METADATA));
   }
 
   public static boolean isODataMetadataFull(final ContentType contentType) {
-    return contentType.isCompatible(ContentType.APPLICATION_JSON)
+    return (contentType.isCompatible(ContentType.APPLICATION_JSON) || contentType.isCompatible(ContentType.APPLICATION_XML))
         && ContentType.VALUE_ODATA_METADATA_FULL.equalsIgnoreCase(
             contentType.getParameter(ContentType.PARAMETER_ODATA_METADATA));
   }

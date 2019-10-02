@@ -55,6 +55,7 @@ import org.apache.olingo.commons.api.edm.EdmType;
 import org.apache.olingo.commons.api.edm.FullQualifiedName;
 import org.apache.olingo.commons.api.edm.constants.EdmTypeKind;
 import org.apache.olingo.commons.api.ex.ODataErrorDetail;
+import org.apache.olingo.commons.api.format.ContentType;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmPrimitiveTypeFactory;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmString;
 import org.apache.olingo.server.api.ODataServerError;
@@ -78,6 +79,7 @@ import org.apache.olingo.server.core.ODataWritableContent;
 import org.apache.olingo.server.core.serializer.AbstractODataSerializer;
 import org.apache.olingo.server.core.serializer.SerializerResultImpl;
 import org.apache.olingo.server.core.serializer.utils.CircleStreamBuffer;
+import org.apache.olingo.server.core.serializer.utils.ContentTypeHelper;
 import org.apache.olingo.server.core.serializer.utils.ContextURLBuilder;
 import org.apache.olingo.server.core.serializer.utils.ExpandSelectHelper;
 import org.apache.olingo.server.core.uri.UriHelperImpl;
@@ -92,6 +94,23 @@ public class ODataXmlSerializer extends AbstractODataSerializer {
   private static final String NS_METADATA = Constants.NS_METADATA;
   private static final String DATA = Constants.PREFIX_DATASERVICES;
   private static final String NS_DATA = Constants.NS_DATASERVICES;
+
+  private final boolean isODataMetadataNone;
+  private final boolean isODataMetadataFull;
+
+  public ODataXmlSerializer(final ContentType contentType) {
+    if (contentType!= null) {
+      isODataMetadataNone = ContentTypeHelper.isODataMetadataNone(contentType);
+      isODataMetadataFull = ContentTypeHelper.isODataMetadataFull(contentType);
+    } else {
+      isODataMetadataNone = false;
+      isODataMetadataFull = false;
+    }
+  }
+
+  public ODataXmlSerializer() {
+    this(null);
+  }
 
   @Override
   public SerializerResult serviceDocument(final ServiceMetadata metadata, final String serviceRoot)
@@ -481,11 +500,25 @@ public class ODataXmlSerializer extends AbstractODataSerializer {
   
       writerAuthorInfo(entity.getTitle(), writer);
   
-      if (entity.getId() != null) {
-        writer.writeStartElement(NS_ATOM, Constants.ATOM_ELEM_LINK);
-        writer.writeAttribute(Constants.ATTR_REL, Constants.EDIT_LINK_REL);
-        writer.writeAttribute(Constants.ATTR_HREF, entity.getId().toASCIIString());
-        writer.writeEndElement();
+      if (isODataMetadataFull) {
+        if (entity.getSelfLink() != null) {
+          writer.writeStartElement(NS_ATOM, Constants.ATOM_ELEM_LINK);
+          writer.writeAttribute(Constants.ATTR_REL, Constants.SELF_LINK_REL);
+          writer.writeAttribute(Constants.ATTR_HREF, entity.getSelfLink().getHref());
+          if (entity.getSelfLink().getTitle() != null) {
+            writer.writeAttribute(Constants.ATTR_TITLE, entity.getSelfLink().getTitle());
+          }
+          writer.writeEndElement();
+        }
+        if (entity.getEditLink() != null) {
+          writer.writeStartElement(NS_ATOM, Constants.ATOM_ELEM_LINK);
+          writer.writeAttribute(Constants.ATTR_REL, Constants.EDIT_LINK_REL);
+          writer.writeAttribute(Constants.ATTR_HREF, entity.getEditLink().getHref());
+          if (entity.getEditLink().getTitle() != null) {
+            writer.writeAttribute(Constants.ATTR_TITLE, entity.getEditLink().getTitle());
+          }
+          writer.writeEndElement();
+        }
       }
   
       if (entityType.hasStream()) {
@@ -543,13 +576,15 @@ public class ODataXmlSerializer extends AbstractODataSerializer {
 
   private void writeOperations(final List<Operation> operations,
       final XMLStreamWriter writer) throws XMLStreamException {
-    for (Operation operation : operations) {
-      boolean action = (operation.getType() != null && operation.getType() == Operation.Type.ACTION);
-      writer.writeStartElement(METADATA, action?Constants.ATOM_ELEM_ACTION:Constants.ATOM_ELEM_FUNCTION, NS_METADATA);
-      writer.writeAttribute(Constants.ATTR_METADATA, operation.getMetadataAnchor());
-      writer.writeAttribute(Constants.ATTR_TITLE, operation.getTitle());
-      writer.writeAttribute(Constants.ATTR_TARGET, operation.getTarget().toASCIIString());
-      writer.writeEndElement();
+    if (isODataMetadataFull) {
+      for (Operation operation : operations) {
+        boolean action = (operation.getType() != null && operation.getType() == Operation.Type.ACTION);
+        writer.writeStartElement(METADATA, action ? Constants.ATOM_ELEM_ACTION : Constants.ATOM_ELEM_FUNCTION, NS_METADATA);
+        writer.writeAttribute(Constants.ATTR_METADATA, operation.getMetadataAnchor());
+        writer.writeAttribute(Constants.ATTR_TITLE, operation.getTitle());
+        writer.writeAttribute(Constants.ATTR_TARGET, operation.getTarget().toASCIIString());
+        writer.writeEndElement();
+      }
     }
   }
 

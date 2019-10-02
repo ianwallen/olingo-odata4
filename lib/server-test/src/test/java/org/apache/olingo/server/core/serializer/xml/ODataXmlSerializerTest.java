@@ -29,13 +29,8 @@ import java.util.Date;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.olingo.commons.api.Constants;
-import org.apache.olingo.commons.api.data.ComplexValue;
-import org.apache.olingo.commons.api.data.ContextURL;
+import org.apache.olingo.commons.api.data.*;
 import org.apache.olingo.commons.api.data.ContextURL.Suffix;
-import org.apache.olingo.commons.api.data.Entity;
-import org.apache.olingo.commons.api.data.EntityCollection;
-import org.apache.olingo.commons.api.data.Property;
-import org.apache.olingo.commons.api.data.ValueType;
 import org.apache.olingo.commons.api.edm.EdmComplexType;
 import org.apache.olingo.commons.api.edm.EdmEntityContainer;
 import org.apache.olingo.commons.api.edm.EdmEntitySet;
@@ -64,7 +59,6 @@ import org.apache.olingo.server.api.uri.queryoption.ExpandOption;
 import org.apache.olingo.server.api.uri.queryoption.LevelsExpandOption;
 import org.apache.olingo.server.api.uri.queryoption.SelectItem;
 import org.apache.olingo.server.api.uri.queryoption.SelectOption;
-import org.apache.olingo.server.core.ServiceMetadataImpl;
 import org.apache.olingo.server.core.serializer.ExpandSelectMock;
 import org.apache.olingo.server.core.serializer.json.ODataJsonSerializer;
 import org.apache.olingo.server.core.uri.UriHelperImpl;
@@ -85,15 +79,21 @@ import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
 public class ODataXmlSerializerTest {
-  private static final ServiceMetadata metadata = new ServiceMetadataImpl(
-      new EdmTechProvider(), Collections.<EdmxReference> emptyList(), new MetadataETagSupport("metadataETag"));
+  private static final OData odata = OData.newInstance();
+  private static final ServiceMetadata metadata = odata.createServiceMetadata(
+          new EdmTechProvider(), Collections.<EdmxReference> emptyList(), new MetadataETagSupport("metadataETag"));
+
+ // private static final ServiceMetadata metadata = new ServiceMetadataImpl(
+ //     new EdmTechProvider(), Collections.<EdmxReference> emptyList(), new MetadataETagSupport("metadataETag"));
   private static final EdmEntityContainer entityContainer = metadata.getEdm().getEntityContainer();
   private static final DifferenceListener DIFFERENCE_LISTENER = new CustomDifferenceListener();
   private static final int MAX_ALLOWED_UPDATED_DIFFERENCE = 2000;
   private static final SimpleDateFormat UPDATED_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
   private final DataProvider data = new DataProvider(OData.newInstance(), metadata.getEdm());
-  private final ODataSerializer serializer = new ODataXmlSerializer();
+  private final ODataSerializer serializer = new ODataXmlSerializer(ContentType.XML);
+  private final ODataSerializer serializerNoMetadata = new ODataXmlSerializer(ContentType.XML_NO_METADATA);
+  private final ODataSerializer serializerFullMetadata = new ODataXmlSerializer(ContentType.XML_FULL_METADATA);
   private final UriHelper helper = new UriHelperImpl();
 
   @BeforeClass
@@ -111,6 +111,74 @@ public class ODataXmlSerializerTest {
     final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     long currentTimeMillis = System.currentTimeMillis();
     InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+        EntitySerializerOptions.with()
+            .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
+            .build()).getContent();
+    final String resultString = IOUtils.toString(result);
+    String expected = "<?xml version='1.0' encoding='UTF-8'?>\n" +
+        "<a:entry xmlns:a=\"http://www.w3.org/2005/Atom\" "
+        + "xmlns:m=\"http://docs.oasis-open.org/odata/ns/metadata\"\n" +
+        "  xmlns:d=\"http://docs.oasis-open.org/odata/ns/data\" "
+        + "m:context=\"$metadata#ESAllPrim/$entity\"\n" +
+        "  m:metadata-etag=\"metadataETag\">\n" +
+        "  <a:id>ESAllPrim(32767)</a:id>\n" +
+        "  <a:title />\n" +
+        "  <a:summary />\n" +
+        "  <a:updated>" + UPDATED_FORMAT.format(new Date(currentTimeMillis)) + "</a:updated>" +
+        "  <a:author>\n" +
+        "    <a:name />\n" +
+        "  </a:author>\n" +
+        "  <a:link\n" +
+        "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
+        "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
+        "    href=\"ESTwoPrim(32767)\" />\n" +
+        "  <a:link\n" +
+        "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimMany\"\n" +
+        "    type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimMany\"\n" +
+        "    href=\"ESAllPrim(32767)/NavPropertyETTwoPrimMany\" />\n" +
+        "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
+        "    term=\"#olingo.odata.test1.ETAllPrim\" />\n" +
+        "  <a:content type=\"application/xml\">\n" +
+        "    <m:properties>\n" +
+        "      <d:PropertyInt16 m:type=\"Int16\">32767</d:PropertyInt16>\n" +
+        "      <d:PropertyString>First Resource - positive values</d:PropertyString>\n" +
+        "      <d:PropertyBoolean m:type=\"Boolean\">true</d:PropertyBoolean>\n" +
+        "      <d:PropertyByte m:type=\"Byte\">255</d:PropertyByte>\n" +
+        "      <d:PropertySByte m:type=\"SByte\">127</d:PropertySByte>\n" +
+        "      <d:PropertyInt32 m:type=\"Int32\">2147483647</d:PropertyInt32>\n" +
+        "      <d:PropertyInt64 m:type=\"Int64\">9223372036854775807\n" +
+        "      </d:PropertyInt64>\n" +
+        "      <d:PropertySingle m:type=\"Single\">1.79E20</d:PropertySingle>\n" +
+        "      <d:PropertyDouble m:type=\"Double\">-1.79E19</d:PropertyDouble>\n" +
+        "      <d:PropertyDecimal m:type=\"Decimal\">34</d:PropertyDecimal>\n" +
+        "      <d:PropertyBinary m:type=\"Binary\">ASNFZ4mrze8=\n" +
+        "      </d:PropertyBinary>\n" +
+        "      <d:PropertyDate m:type=\"Date\">2012-12-03</d:PropertyDate>\n" +
+        "      <d:PropertyDateTimeOffset m:type=\"DateTimeOffset\">2012-12-03T07:16:23Z\n" +
+        "      </d:PropertyDateTimeOffset>\n" +
+        "      <d:PropertyDuration m:type=\"Duration\">PT6S\n" +
+        "      </d:PropertyDuration>\n" +
+        "      <d:PropertyGuid m:type=\"Guid\">01234567-89ab-cdef-0123-456789abcdef\n" +
+        "      </d:PropertyGuid>\n" +
+        "      <d:PropertyTimeOfDay m:type=\"TimeOfDay\">03:26:05\n" +
+        "      </d:PropertyTimeOfDay>\n" +
+        "    </m:properties>\n" +
+        "  </a:content>\n" +
+        "</a:entry>";
+    checkXMLEqual(expected, resultString);
+  }
+
+  @Test
+  public void entitySimpleMetadataFull() throws Exception {
+    final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
+    final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
+    final Link editLink = new Link();
+    editLink.setHref(entity.getId().toASCIIString());
+    editLink.setRel(Constants.EDIT_LINK_REL);
+    entity.setEditLink(editLink);
+
+    long currentTimeMillis = System.currentTimeMillis();
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .build()).getContent();
@@ -173,11 +241,74 @@ public class ODataXmlSerializerTest {
   }
 
   @Test
+  public void entitySimpleMetadataNone() throws Exception {
+    final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
+    final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
+    long currentTimeMillis = System.currentTimeMillis();
+    InputStream result = serializerNoMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
+        EntitySerializerOptions.with()
+            .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
+            .build()).getContent();
+    final String resultString = IOUtils.toString(result);
+    String expected = "<?xml version='1.0' encoding='UTF-8'?>\n" +
+        "<a:entry xmlns:a=\"http://www.w3.org/2005/Atom\" "
+        + "xmlns:m=\"http://docs.oasis-open.org/odata/ns/metadata\"\n" +
+        "  xmlns:d=\"http://docs.oasis-open.org/odata/ns/data\" "
+        + "m:context=\"$metadata#ESAllPrim/$entity\"\n" +
+        "  m:metadata-etag=\"metadataETag\">\n" +
+        "  <a:id>ESAllPrim(32767)</a:id>\n" +
+        "  <a:title />\n" +
+        "  <a:summary />\n" +
+        "  <a:updated>" + UPDATED_FORMAT.format(new Date(currentTimeMillis)) + "</a:updated>" +
+        "  <a:author>\n" +
+        "    <a:name />\n" +
+        "  </a:author>\n" +
+        "  <a:link\n" +
+        "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
+        "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
+        "    href=\"ESTwoPrim(32767)\" />\n" +
+        "  <a:link\n" +
+        "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimMany\"\n" +
+        "    type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimMany\"\n" +
+        "    href=\"ESAllPrim(32767)/NavPropertyETTwoPrimMany\" />\n" +
+        "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
+        "    term=\"#olingo.odata.test1.ETAllPrim\" />\n" +
+        "  <a:content type=\"application/xml\">\n" +
+        "    <m:properties>\n" +
+        "      <d:PropertyInt16 m:type=\"Int16\">32767</d:PropertyInt16>\n" +
+        "      <d:PropertyString>First Resource - positive values</d:PropertyString>\n" +
+        "      <d:PropertyBoolean m:type=\"Boolean\">true</d:PropertyBoolean>\n" +
+        "      <d:PropertyByte m:type=\"Byte\">255</d:PropertyByte>\n" +
+        "      <d:PropertySByte m:type=\"SByte\">127</d:PropertySByte>\n" +
+        "      <d:PropertyInt32 m:type=\"Int32\">2147483647</d:PropertyInt32>\n" +
+        "      <d:PropertyInt64 m:type=\"Int64\">9223372036854775807\n" +
+        "      </d:PropertyInt64>\n" +
+        "      <d:PropertySingle m:type=\"Single\">1.79E20</d:PropertySingle>\n" +
+        "      <d:PropertyDouble m:type=\"Double\">-1.79E19</d:PropertyDouble>\n" +
+        "      <d:PropertyDecimal m:type=\"Decimal\">34</d:PropertyDecimal>\n" +
+        "      <d:PropertyBinary m:type=\"Binary\">ASNFZ4mrze8=\n" +
+        "      </d:PropertyBinary>\n" +
+        "      <d:PropertyDate m:type=\"Date\">2012-12-03</d:PropertyDate>\n" +
+        "      <d:PropertyDateTimeOffset m:type=\"DateTimeOffset\">2012-12-03T07:16:23Z\n" +
+        "      </d:PropertyDateTimeOffset>\n" +
+        "      <d:PropertyDuration m:type=\"Duration\">PT6S\n" +
+        "      </d:PropertyDuration>\n" +
+        "      <d:PropertyGuid m:type=\"Guid\">01234567-89ab-cdef-0123-456789abcdef\n" +
+        "      </d:PropertyGuid>\n" +
+        "      <d:PropertyTimeOfDay m:type=\"TimeOfDay\">03:26:05\n" +
+        "      </d:PropertyTimeOfDay>\n" +
+        "    </m:properties>\n" +
+        "  </a:content>\n" +
+        "</a:entry>";
+    checkXMLEqual(expected, resultString);
+  }
+
+  @Test
   public void entitySetSimple() throws Exception {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
     final EntityCollection entityCollection = data.readAll(edmEntitySet);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entityCollection(metadata, edmEntitySet.getEntityType(), entityCollection,
+    InputStream result = serializerFullMetadata.entityCollection(metadata, edmEntitySet.getEntityType(), entityCollection,
         EntityCollectionSerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).build())
             .build()).getContent();
@@ -204,7 +335,6 @@ public class ODataXmlSerializerTest {
         "      <a:author>\n" + 
         "         <a:name />\n" + 
         "      </a:author>\n" + 
-        "      <a:link rel=\"edit\" href=\"ESAllPrim(32767)\" />\n" + 
         "      <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" "
         + "type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\" "
         + "href=\"ESTwoPrim(32767)\" />\n" + 
@@ -246,7 +376,6 @@ public class ODataXmlSerializerTest {
         "      <a:author>\n" + 
         "         <a:name />\n" + 
         "      </a:author>\n" + 
-        "      <a:link rel=\"edit\" href=\"ESAllPrim(-32768)\" />\n" + 
         "      <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" "
         + "type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimOne\" "
         + "href=\"ESAllPrim(-32768)/NavPropertyETTwoPrimOne\" />\n" + 
@@ -288,7 +417,6 @@ public class ODataXmlSerializerTest {
         "      <a:author>\n" + 
         "         <a:name />\n" + 
         "      </a:author>\n" + 
-        "      <a:link rel=\"edit\" href=\"ESAllPrim(0)\" />\n" + 
         "      <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" "
         + "type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\" "
         + "href=\"ESBase(111)\" />\n" + 
@@ -330,7 +458,6 @@ public class ODataXmlSerializerTest {
         "<a:author>\n" +
         "<a:name/>\n" +
       "</a:author>\n" +
-      "<a:link rel=\"edit\" href=\"ESAllPrim(10)\"/>\n" +
       "<a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" "
       + "type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimOne\" "
       + "href=\"ESAllPrim(10)/NavPropertyETTwoPrimOne\"/>\n" +
@@ -375,7 +502,7 @@ public class ODataXmlSerializerTest {
     Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     entity.getProperties().retainAll(Arrays.asList(entity.getProperties().get(0)));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream content = serializer.entity(metadata, edmEntitySet.getEntityType(),
+    InputStream content = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(),
         entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
@@ -394,7 +521,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESAllPrim(32767)\"/>\n" +
         "  <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -439,7 +565,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
     Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     entity.getProperties().clear();
-    serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .build());
@@ -451,7 +577,7 @@ public class ODataXmlSerializerTest {
     Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     entity.getProperties().get(0).setValue(ValueType.PRIMITIVE, false);
     try {
-      serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+      serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
           EntitySerializerOptions.with()
               .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
               .build());
@@ -472,7 +598,7 @@ public class ODataXmlSerializerTest {
     entitySet.setNext(URI.create("/next"));
     CountOption countOption = Mockito.mock(CountOption.class);
     Mockito.when(countOption.getValue()).thenReturn(true);
-    InputStream result = serializer.entityCollection(metadata, edmEntitySet.getEntityType(), entitySet,
+    InputStream result = serializerFullMetadata.entityCollection(metadata, edmEntitySet.getEntityType(), entitySet,
         EntityCollectionSerializerOptions.with()
             .contextURL(ContextURL.with().serviceRoot(new URI("http://host:port"))
                 .entitySet(edmEntitySet).build())
@@ -499,7 +625,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESCollAllPrim");
     final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().serviceRoot(URI.create("http://host/service/"))
                 .entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
@@ -518,7 +644,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESCollAllPrim(1)\" />\n" +
         "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
         "    term=\"#olingo.odata.test1.ETCollAllPrim\" />\n" +
         "  <a:content type=\"application/xml\">\n" +
@@ -615,7 +740,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESCompAllPrim");
     final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .build()).getContent();
@@ -634,7 +759,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESCompAllPrim(32767)\" />\n" +
         "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
         "    term=\"#olingo.odata.test1.ETCompAllPrim\" />\n" +
         "  <a:content type=\"application/xml\">\n" +
@@ -673,7 +797,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESMixPrimCollComp");
     final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .build()).getContent();
@@ -691,7 +815,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESMixPrimCollComp(32767)\"/>\n" +
         "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
         "    term=\"#olingo.odata.test1.ETMixPrimCollComp\" />\n" +
         "  <a:content type=\"application/xml\">\n" +
@@ -760,7 +883,7 @@ public class ODataXmlSerializerTest {
     Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     entity.getProperties().retainAll(Arrays.asList(entity.getProperties().get(0)));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream content = serializer.entity(metadata, edmEntitySet.getEntityType(),
+    InputStream content = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(),
         entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
@@ -779,7 +902,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESMixPrimCollComp(32767)\"/>\n" +
         "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
         "    term=\"#olingo.odata.test1.ETMixPrimCollComp\" />\n" +
         "  <a:content type=\"application/xml\">\n" +
@@ -802,7 +924,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESCompCollDerived");
     final Entity entity = data.readAll(edmEntitySet).getEntities().get(1);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .build()).getContent();
@@ -818,7 +940,6 @@ public class ODataXmlSerializerTest {
         " <a:author>\n" +
         "   <a:name/>\n" +
         " </a:author>\n" +
-        " <a:link rel=\"edit\" href=\"ESCompCollDerived(12345)\"/>\n" +
         " <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n"+
         " term=\"#olingo.odata.test1.ETDeriveCollComp\"/>\n" +
         " <a:content type=\"application/xml\">\n" +
@@ -851,7 +972,7 @@ public class ODataXmlSerializerTest {
     long currentTimeMillis = System.currentTimeMillis();
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Collections.singletonList(
         ExpandSelectMock.mockExpandItem(edmEntitySet, "NavPropertyETTwoPrimMany")));
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .expand(expand)
@@ -869,7 +990,6 @@ public class ODataXmlSerializerTest {
         " <a:author>\n" +
         "   <a:name/>\n" +
         " </a:author>\n" +
-        " <a:link rel=\"edit\" href=\"ESAllPrim(0)\"/>\n" +
         " <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" \n" +
         " type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimOne\" \n" +
         " href=\"ESAllPrim(0)/NavPropertyETTwoPrimOne\"/>\n" +
@@ -886,7 +1006,6 @@ public class ODataXmlSerializerTest {
         "         <a:author>\n" +
         "           <a:name/>\n" +
         "         </a:author>\n" +
-        "         <a:link rel=\"edit\" href=\"ESTwoPrimDerived(-365)\"/>\n" +
         "         <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\" \n" +
         "         type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\" \n" +
         "         href=\"ESTwoPrimDerived(-365)/NavPropertyETAllPrimOne\"/>\n" +
@@ -922,7 +1041,6 @@ public class ODataXmlSerializerTest {
         "         <a:author>\n" +
         "           <a:name/>\n" +
         "         </a:author>\n" +
-        "         <a:link rel=\"edit\" href=\"ESTwoPrimDerived(32767)\"/>\n" +
         "         <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\" \n" +
         "         type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\" \n" +
         "         href=\"ESTwoPrimDerived(32767)/NavPropertyETAllPrimOne\"/>\n" +
@@ -958,7 +1076,6 @@ public class ODataXmlSerializerTest {
         "         <a:author>\n" +
         "           <a:name/>\n" +
         "         </a:author>\n" +
-        "         <a:link rel=\"edit\" href=\"ESTwoPrimDerived(32766)\"/>\n" +
         "         <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\" \n" +
         "         type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\" \n" +
         "         href=\"ESTwoPrimDerived(32766)/NavPropertyETAllPrimOne\"/>\n" +
@@ -1027,7 +1144,7 @@ public class ODataXmlSerializerTest {
     long currentTimeMillis = System.currentTimeMillis();
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Collections.singletonList(
         ExpandSelectMock.mockExpandItem(edmEntitySet, "NavPropertyETTwoPrimOne")));
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .expand(expand)
@@ -1044,8 +1161,7 @@ public class ODataXmlSerializerTest {
         " <a:author>\n" +
         "   <a:name/>\n" +
         " </a:author>\n" +
-        " <a:link rel=\"edit\" href=\"ESAllPrim(32767)\"/>\n" +
-        " <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" \n" + 
+        " <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" \n" +
         " type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
         " href=\"ESTwoPrimDerived(32766)\">\n" +
         "   <m:inline>\n" +
@@ -1057,7 +1173,6 @@ public class ODataXmlSerializerTest {
         "       <a:author>\n" +
         "         <a:name/>\n" +
         "       </a:author>\n" +
-        "       <a:link rel=\"edit\" href=\"ESTwoPrimDerived(32766)\"/>\n" +
         "       <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\" \n" +
         "       type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\" \n" +
         "       href=\"ESTwoPrimDerived(32766)/NavPropertyETAllPrimOne\"/>\n" +
@@ -1130,7 +1245,7 @@ public class ODataXmlSerializerTest {
     long currentTimeMillis = System.currentTimeMillis();
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Collections.singletonList(
         ExpandSelectMock.mockExpandItem(edmEntitySet, "NavPropertyETTwoPrimOne")));
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .expand(expand)
@@ -1149,7 +1264,6 @@ public class ODataXmlSerializerTest {
     " <a:author>\n" +
     "   <a:name/>\n" +
     " </a:author>\n" +
-    " <a:link rel=\"edit\" href=\"ESAllPrim(-32768)\"/>\n" +
     " <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\" \n" +
     " type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimOne\" \n" +
     " href=\"ESAllPrim(-32768)/NavPropertyETTwoPrimOne\">\n" +
@@ -1207,7 +1321,7 @@ public class ODataXmlSerializerTest {
     entity.addProperty(new Property(null, "CollPropertyCompMixedEnumDef", ValueType.COLLECTION_COMPLEX,
         Collections.singletonList(complexValue)));
     final long currentTimeMillis = System.currentTimeMillis();
-    final String resultString = IOUtils.toString(serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    final String resultString = IOUtils.toString(serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .build()).getContent());
@@ -1220,7 +1334,6 @@ public class ODataXmlSerializerTest {
         + "  <a:title /> <a:summary />\n"
         + "  <a:updated>" + UPDATED_FORMAT.format(new Date(currentTimeMillis)) + "</a:updated>\n"
         + "  <a:author> <a:name /> </a:author>\n"
-        + "  <a:link rel=\"edit\" href=\"id\" />"
         + "  <a:category scheme=\"" + Constants.NS_SCHEME + "\"\n"
         + "    term=\"#olingo.odata.test1.ETMixEnumDefCollComp\" />\n"
         + "  <a:content type=\"application/xml\">\n"
@@ -1305,7 +1418,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESMedia");
     final Entity entity = data.readAll(edmEntitySet).getEntities().get(0);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream content = serializer.entity(metadata, edmEntitySet.getEntityType(),
+    InputStream content = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(),
         entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
@@ -1324,7 +1437,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESMedia(1)\"/>\n" +
         "  <a:content type=\"image/svg+xml\" src=\"ESMedia(1)/$value\" />\n" +
         "  <a:link rel=\"edit-media\" title=\"ESMedia\" href=\"ESMedia(1)/$value\"/>\n" +
         "  <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
@@ -1341,7 +1453,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESMedia");
     final EntityCollection entitySet = data.readAll(edmEntitySet);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream content = serializer.entityCollection(metadata,
+    InputStream content = serializerFullMetadata.entityCollection(metadata,
         edmEntitySet.getEntityType(), entitySet,
         EntityCollectionSerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).build())
@@ -1363,7 +1475,6 @@ public class ODataXmlSerializerTest {
         "    <a:author>\n" +
         "      <a:name />\n" +
         "    </a:author>\n" +
-        "    <a:link rel=\"edit\" href=\"ESMedia(1)\"/>\n" +
         "    <a:content type=\"image/svg+xml\" src=\"ESMedia(1)/$value\" />\n" +
         "    <a:link rel=\"edit-media\" title=\"ESMedia\" href=\"ESMedia(1)/$value\"/>\n" +
         "    <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
@@ -1380,7 +1491,6 @@ public class ODataXmlSerializerTest {
         "    <a:author>\n" +
         "      <a:name />\n" +
         "    </a:author>\n" +
-        "    <a:link rel=\"edit\" href=\"ESMedia(2)\"/>\n" +
         "    <a:content type=\"image/svg+xml\" src=\"ESMedia(2)/$value\" />\n" +
         "    <a:link rel=\"edit-media\" title=\"ESMedia\" href=\"ESMedia(2)/$value\"/>\n" +
         "    <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
@@ -1397,7 +1507,6 @@ public class ODataXmlSerializerTest {
         "    <a:author>\n" +
         "      <a:name />\n" +
         "    </a:author>\n" +
-        "    <a:link rel=\"edit\" href=\"ESMedia(3)\"/>\n" +
         "    <a:content type=\"image/svg+xml\" src=\"ESMedia(3)/$value\" />\n" +
         "    <a:link rel=\"edit-media\" title=\"ESMedia\" href=\"ESMedia(3)/$value\"/>\n" +
         "    <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
@@ -1414,7 +1523,6 @@ public class ODataXmlSerializerTest {
         "    <a:author>\n" +
         "      <a:name />\n" +
         "    </a:author>\n" +
-        "    <a:link rel=\"edit\" href=\"ESMedia(4)\"/>\n" +
         "    <a:content type=\"image/svg+xml\" src=\"ESMedia(4)/$value\" />\n" +
         "    <a:link rel=\"edit-media\" title=\"ESMedia\" href=\"ESMedia(4)/$value\"/>\n" +
         "    <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
@@ -1433,7 +1541,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllNullable");
     final EntityCollection entitySet = data.readAll(edmEntitySet);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream content = serializer.entityCollection(metadata,
+    InputStream content = serializerFullMetadata.entityCollection(metadata,
         edmEntitySet.getEntityType(), entitySet,
         EntityCollectionSerializerOptions.with()
             .contextURL(ContextURL.with().serviceRoot(URI.create("http://host/svc"))
@@ -1456,7 +1564,6 @@ public class ODataXmlSerializerTest {
         "    <a:author>\n" +
         "      <a:name />\n" +
         "    </a:author>\n" +
-        "    <a:link rel=\"edit\" href=\"ESAllNullable(1)\" />\n" +
         "    <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\"\n" +
         "      term=\"#olingo.odata.test1.ETAllNullable\" />\n" +
         "    <a:content type=\"application/xml\">\n" +
@@ -1575,7 +1682,7 @@ public class ODataXmlSerializerTest {
     final SelectOption select = ExpandSelectMock.mockSelectOption(Arrays.asList(
         selectItem1, selectItem2, selectItem2));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer
+    InputStream result = serializerFullMetadata
         .entity(metadata, entityType, entity,
             EntitySerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -1597,7 +1704,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESAllPrim(32767)\"/>\n" +
         "  <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -1631,7 +1737,7 @@ public class ODataXmlSerializerTest {
         ExpandSelectMock.mockSelectItem(edmEntitySet, "PropertyInt16"),
         ExpandSelectMock.mockSelectItem(edmEntitySet,"PropertyCompComp", "PropertyComp", "PropertyString")));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer
+    InputStream result = serializerFullMetadata
         .entityCollection(metadata, entityType, entitySet,
             EntityCollectionSerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -1657,8 +1763,6 @@ public class ODataXmlSerializerTest {
                 "<a:author>\n" +
                     "<a:name/>\n" +
                 "</a:author>\n" +
-                "<a:link rel=\"edit\" " +
-                "href=\"ESFourKeyAlias(PropertyInt16=1,KeyAlias1=11,KeyAlias2='Num11',KeyAlias3='Num111')\"/>\n" +
                 "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " +
                   "term=\"#olingo.odata.test1.ETFourKeyAlias\"/>\n" +
                 "<a:content type=\"application/xml\">\n" +
@@ -1688,7 +1792,7 @@ public class ODataXmlSerializerTest {
     final EdmEntityType entityType = edmEntitySet.getEntityType();
     final EntityCollection entitySet = data.readAll(edmEntitySet);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer
+    InputStream result = serializerFullMetadata
         .entityCollection(metadata, entityType, entitySet,
             EntityCollectionSerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet).build())
@@ -1710,8 +1814,6 @@ public class ODataXmlSerializerTest {
                 "<a:author>\n" +
                     "<a:name/>\n" +
                 "</a:author>\n" +
-                "<a:link rel=\"edit\" " +
-                "href=\"ESFourKeyAlias(PropertyInt16=1,KeyAlias1=11,KeyAlias2='Num11',KeyAlias3='Num111')\"/>\n" +
                 "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " +
                   "term=\"#olingo.odata.test1.ETFourKeyAlias\"/>\n" +
                "<a:content type=\"application/xml\">\n" +
@@ -1756,7 +1858,7 @@ public class ODataXmlSerializerTest {
         ExpandSelectMock.mockSelectItem(edmEntitySet, "PropertyComp", "PropertyString"),
         ExpandSelectMock.mockSelectItem(edmEntitySet, "PropertyCompComp", "PropertyComp")));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream inputStream = serializer
+    InputStream inputStream = serializerFullMetadata
         .entityCollection(metadata, entityType, entitySet,
             EntityCollectionSerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -1782,8 +1884,6 @@ public class ODataXmlSerializerTest {
                 "<a:author>\n" +
                     "<a:name/>\n" +
                 "</a:author>\n" +
-                "<a:link rel=\"edit\" " +
-                "href=\"ESFourKeyAlias(PropertyInt16=1,KeyAlias1=11,KeyAlias2='Num11',KeyAlias3='Num111')\"/>\n" +
                 "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " +
                  "term=\"#olingo.odata.test1.ETFourKeyAlias\"/>\n" +
                 "<a:content type=\"application/xml\">\n" +
@@ -1823,7 +1923,7 @@ public class ODataXmlSerializerTest {
       final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESCompCollComp");
     final EntityCollection entitySet = data.readAll(edmEntitySet);
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream content = serializer.entityCollection(metadata,
+    InputStream content = serializerFullMetadata.entityCollection(metadata,
         edmEntitySet.getEntityType(), entitySet,
         EntityCollectionSerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).build())
@@ -1847,8 +1947,7 @@ public class ODataXmlSerializerTest {
             "<a:author>\n" +
             "<a:name/>\n" +
             "</a:author>\n" +
-            "<a:link rel=\"edit\" href=\"ESCompCollComp(32767)\"/>\n" +
-            "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " + 
+            "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " +
             "term=\"#olingo.odata.test1.ETCompCollComp\"/>\n" +
             "<a:content type=\"application/xml\">\n" +
             "<m:properties>\n" +
@@ -1898,8 +1997,7 @@ public class ODataXmlSerializerTest {
             "<a:author>\n" +
             "<a:name/>\n" +
             "</a:author>\n" +
-            "<a:link rel=\"edit\" href=\"ESCompCollComp(12345)\"/>\n" +
-            "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " + 
+            "<a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" " +
             "term=\"#olingo.odata.test1.ETCompCollComp\"/>\n" +
             "<a:content type=\"application/xml\">\n" +
             "<m:properties>\n" +
@@ -1953,7 +2051,7 @@ public class ODataXmlSerializerTest {
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Arrays.asList(
         ExpandSelectMock.mockExpandItem(edmEntitySet, "NavPropertyETAllPrimOne")));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .expand(expand)
@@ -1971,7 +2069,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESTwoPrim(32767)\" />\n" +
         "  <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -1985,7 +2082,6 @@ public class ODataXmlSerializerTest {
         "        <a:author>\n" +
         "          <a:name />\n" +
         "        </a:author>\n" +
-        "        <a:link rel=\"edit\" href=\"ESAllPrim(32767)\" />\n" +
         "        <a:link\n" +
         "          rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "          type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -2073,7 +2169,7 @@ public class ODataXmlSerializerTest {
     Mockito.when(expandItem.getSelectOption()).thenReturn(select);
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Arrays.asList(expandItem));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream inputStream = serializer
+    InputStream inputStream = serializerFullMetadata
         .entity(metadata, entityType, entity,
             EntitySerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -2096,7 +2192,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESTwoPrim(32767)\" />\n" +
         "  <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2110,7 +2205,6 @@ public class ODataXmlSerializerTest {
         "        <a:author>\n" +
         "          <a:name />\n" +
         "        </a:author>\n" +
-        "        <a:link rel=\"edit\" href=\"ESAllPrim(32767)\" />\n" +
         "        <a:link\n" +
         "          rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "          type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -2174,7 +2268,7 @@ public class ODataXmlSerializerTest {
     final SelectOption select = ExpandSelectMock.mockSelectOption(Arrays.asList(
         ExpandSelectMock.mockSelectItem(edmEntitySet, "PropertySByte")));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream inputStream = serializer
+    InputStream inputStream = serializerFullMetadata
         .entity(metadata, entityType, entity,
             EntitySerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -2198,7 +2292,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESAllPrim(32767)\"/>\n" +
         "  <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -2213,7 +2306,6 @@ public class ODataXmlSerializerTest {
         "        <a:author>\n" +
         "          <a:name />\n" +
         "        </a:author>\n" +
-        "        <a:link rel=\"edit\" href=\"ESTwoPrim(32767)\"/>\n" +
         "        <a:link\n" +
         "          rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "          type=\"application/atom+xml;type=entry\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2260,7 +2352,6 @@ public class ODataXmlSerializerTest {
         "          <a:author>\n" +
         "            <a:name />\n" +
         "          </a:author>\n" +
-        "          <a:link rel=\"edit\" href=\"ESTwoPrim(-365)\"/>\n" +
         "         <a:link\n" +
         "            rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "            type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2320,7 +2411,7 @@ public class ODataXmlSerializerTest {
     final SelectOption select = ExpandSelectMock.mockSelectOption(Arrays.asList(
         ExpandSelectMock.mockSelectItem(edmEntitySet, "PropertyTimeOfDay")));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer
+    InputStream result = serializerFullMetadata
         .entity(metadata, entityType, entity,
             EntitySerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -2344,7 +2435,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESAllPrim(-32768)\" />\n" +
         "  <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "    type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -2391,7 +2481,7 @@ public class ODataXmlSerializerTest {
     Mockito.when(expandItemFirst.getSelectOption()).thenReturn(select);
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Arrays.asList(expandItemFirst));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer
+    InputStream result = serializerFullMetadata
         .entity(metadata, entityType, entity,
             EntitySerializerOptions.with()
                 .contextURL(ContextURL.with().entitySet(edmEntitySet)
@@ -2415,7 +2505,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" +
         "    <a:name />\n" +
         "  </a:author>\n" +
-        "  <a:link rel=\"edit\" href=\"ESTwoPrim(-365)\" />\n" +
         " <a:link\n" +
         "    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "    type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2435,7 +2524,6 @@ public class ODataXmlSerializerTest {
         "          <a:author>\n" +
         "            <a:name />\n" +
         "          </a:author>\n" +
-        "          <a:link rel=\"edit\" href=\"ESAllPrim(-32768)\" />\n" +
         "         <a:link\n" +
         "            rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "            type=\"application/atom+xml;type=feed\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -2471,7 +2559,6 @@ public class ODataXmlSerializerTest {
         "          <a:author>\n" +
         "            <a:name />\n" +
         "          </a:author>\n" +
-        "          <a:link rel=\"edit\" href=\"ESAllPrim(0)\" />\n" +
         "         <a:link\n" +
         "            rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETTwoPrimOne\"\n" +
         "            type=\"application/atom+xml;type=entry\" title=\"NavPropertyETTwoPrimOne\"\n" +
@@ -2486,7 +2573,6 @@ public class ODataXmlSerializerTest {
         "           <a:author>\n "+
         "             <a:name/>\n "+
         "           </a:author>\n "+
-        "           <a:link rel=\"edit\" href=\"ESBase(111)\"/>\n "+
         "           <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\" "
         + "type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\" "
         + "href=\"ESBase(111)/NavPropertyETAllPrimOne\"/>\n "+
@@ -2523,7 +2609,6 @@ public class ODataXmlSerializerTest {
         "                  <a:author>\n" +
         "                    <a:name />\n" +
         "                  </a:author>\n" +
-        "                  <a:link rel=\"edit\" href=\"ESTwoPrim(32766)\" />\n" +
         "                 <a:link\n" +
         "                    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "                    type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2562,7 +2647,6 @@ public class ODataXmlSerializerTest {
         "                  <a:author>\n" +
         "                    <a:name />\n" +
         "                  </a:author>\n" +
-        "                  <a:link rel=\"edit\" href=\"ESTwoPrim(-32766)\" />\n" +
         "                 <a:link\n" +
         "                    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "                    type=\"application/atom+xml;type=feed\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2601,7 +2685,6 @@ public class ODataXmlSerializerTest {
         "                  <a:author>\n" +
         "                    <a:name />\n" +
         "                  </a:author>\n" +
-        "                  <a:link rel=\"edit\" href=\"ESTwoPrim(32767)\" />\n" +
         "                  <a:link\n" +
         "                    rel=\"http://docs.oasis-open.org/odata/ns/related/NavPropertyETAllPrimOne\"\n" +
         "                    type=\"application/atom+xml;type=entry\" title=\"NavPropertyETAllPrimOne\"\n" +
@@ -2678,7 +2761,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
     final EdmProperty edmProperty = (EdmProperty) edmEntitySet.getEntityType().getProperty("PropertyString");
     final Property property = data.readAll(edmEntitySet).getEntities().get(0).getProperty(edmProperty.getName());
-    final String resultString = IOUtils.toString(serializer
+    final String resultString = IOUtils.toString(serializerFullMetadata
         .primitive(metadata, (EdmPrimitiveType) edmProperty.getType(), property,
             PrimitiveSerializerOptions.with()
                 .contextURL(ContextURL.with()
@@ -2700,7 +2783,7 @@ public class ODataXmlSerializerTest {
     final EdmProperty edmProperty = (EdmProperty) edmEntitySet.getEntityType().getProperty("PropertyString");
     final Property property = data.readAll(edmEntitySet).getEntities().get(0).getProperty(edmProperty.getName());
     property.setValue(ValueType.PRIMITIVE, "ab\u0000cd\u0001");
-    final String resultString = IOUtils.toString(serializer
+    final String resultString = IOUtils.toString(serializerFullMetadata
         .primitive(metadata, (EdmPrimitiveType) edmProperty.getType(), property,
             PrimitiveSerializerOptions.with()
                 .contextURL(ContextURL.with()
@@ -2723,7 +2806,7 @@ public class ODataXmlSerializerTest {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
     final EdmProperty edmProperty = (EdmProperty) edmEntitySet.getEntityType().getProperty("PropertyString");
     final Property property = new Property("Edm.String", edmProperty.getName(), ValueType.PRIMITIVE, null);
-    String response = IOUtils.toString(serializer.primitive(metadata, (EdmPrimitiveType) edmProperty.getType(),
+    String response = IOUtils.toString(serializerFullMetadata.primitive(metadata, (EdmPrimitiveType) edmProperty.getType(),
         property,
         PrimitiveSerializerOptions.with()
             .contextURL(ContextURL.with()
@@ -2744,7 +2827,7 @@ public class ODataXmlSerializerTest {
     final EdmProperty edmProperty = (EdmProperty) edmEntitySet.getEntityType().getProperty("CollPropertyString");
     final Property property = data.readAll(edmEntitySet).getEntities().get(0).getProperty(edmProperty.getName());
 
-    final String resultString = IOUtils.toString(serializer
+    final String resultString = IOUtils.toString(serializerFullMetadata
         .primitiveCollection(metadata, (EdmPrimitiveType) edmProperty.getType(), property,
             PrimitiveSerializerOptions.with()
                 .contextURL(ContextURL.with()
@@ -2768,7 +2851,7 @@ public class ODataXmlSerializerTest {
     final EdmProperty edmProperty = (EdmProperty) edmEntitySet.getEntityType().getProperty("PropertyComp");
     final Property property = data.readAll(edmEntitySet).getEntities().get(0).getProperty("PropertyComp");
 
-    final String resultString = IOUtils.toString(serializer
+    final String resultString = IOUtils.toString(serializerFullMetadata
         .complex(metadata, (EdmComplexType) edmProperty.getType(), property,
             ComplexSerializerOptions.with()
                 .contextURL(ContextURL.with()
@@ -2793,7 +2876,7 @@ public class ODataXmlSerializerTest {
     final EdmProperty edmProperty = (EdmProperty) edmEntitySet.getEntityType().getProperty("CollPropertyComp");
     final Property property = data.readAll(edmEntitySet).getEntities().get(0).getProperty(edmProperty.getName());
 
-    final String resultString = IOUtils.toString(serializer
+    final String resultString = IOUtils.toString(serializerFullMetadata
         .complexCollection(metadata, (EdmComplexType) edmProperty.getType(), property,
             ComplexSerializerOptions.with()
                 .contextURL(ContextURL.with()
@@ -2849,7 +2932,7 @@ public class ODataXmlSerializerTest {
     ReferenceSerializerOptions options = ReferenceSerializerOptions.with()
         .contextURL(ContextURL.with().suffix(Suffix.REFERENCE).build()).build();
 
-    final SerializerResult serializerResult = serializer.reference(metadata, edmEntitySet, entity, options);
+    final SerializerResult serializerResult = serializerFullMetadata.reference(metadata, edmEntitySet, entity, options);
     final String resultString = IOUtils.toString(serializerResult.getContent());
     String expected = "<?xml version='1.0' encoding='UTF-8'?>\n" +
         "<m:ref xmlns:m=\"http://docs.oasis-open.org/odata/ns/metadata\"\n" +
@@ -2865,7 +2948,7 @@ public class ODataXmlSerializerTest {
     ReferenceCollectionSerializerOptions options = ReferenceCollectionSerializerOptions.with()
         .contextURL(ContextURL.with().asCollection().suffix(Suffix.REFERENCE).build()).build();
 
-    final SerializerResult serializerResult = serializer.referenceCollection(metadata,
+    final SerializerResult serializerResult = serializerFullMetadata.referenceCollection(metadata,
         edmEntitySet,
         entityCollection, options);
 
@@ -2890,7 +2973,7 @@ public class ODataXmlSerializerTest {
     ReferenceCollectionSerializerOptions options = ReferenceCollectionSerializerOptions.with()
         .contextURL(ContextURL.with().asCollection().suffix(Suffix.REFERENCE).build()).build();
 
-    final SerializerResult serializerResult = serializer.referenceCollection(metadata,
+    final SerializerResult serializerResult = serializerFullMetadata.referenceCollection(metadata,
         edmEntitySet,
         entityCollection, options);
 
@@ -2915,7 +2998,7 @@ public class ODataXmlSerializerTest {
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Collections.singletonList(
         mockExpandItem));
     long currentTimeMillis = System.currentTimeMillis();
-    SerializerResult result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    SerializerResult result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .expand(expand)
@@ -2934,7 +3017,6 @@ public class ODataXmlSerializerTest {
             "   <a:author>\n" + 
             "      <a:name />\n" + 
             "   </a:author>\n" + 
-            "   <a:link rel=\"edit\" href=\"ESPeople(1)\" />\n" + 
             "   <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(1)/friends\">\n" + 
             "      <m:inline>\n" + 
@@ -2947,7 +3029,6 @@ public class ODataXmlSerializerTest {
             "               <a:author>\n" + 
             "                  <a:name />\n" + 
             "               </a:author>\n" + 
-            "               <a:link rel=\"edit\" href=\"ESPeople(0)\" />\n" + 
             "               <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(0)/friends\">\n" + 
             "                  <m:inline>\n" + 
@@ -2961,7 +3042,6 @@ public class ODataXmlSerializerTest {
             "                           <a:author>\n" + 
             "                              <a:name />\n" + 
             "                           </a:author>\n" + 
-            "                           <a:link rel=\"edit\" href=\"ESPeople(2)\" />\n" + 
             "                           <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(2)/friends\">\n" + 
             "                              <m:inline>\n" + 
@@ -2975,7 +3055,6 @@ public class ODataXmlSerializerTest {
             "                                       <a:author>\n" + 
             "                                          <a:name />\n" + 
             "                                       </a:author>\n" + 
-            "                                       <a:link rel=\"edit\" href=\"ESPeople(3)\" />\n" + 
             "                                     <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(3)/friends\">\n" + 
             "                                          <m:inline>\n" + 
@@ -3023,7 +3102,6 @@ public class ODataXmlSerializerTest {
             "               <a:author>\n" + 
             "                  <a:name />\n" + 
             "               </a:author>\n" + 
-            "               <a:link rel=\"edit\" href=\"ESPeople(2)\" />\n" + 
             "               <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(2)/friends\">\n" + 
             "                  <m:inline>\n" + 
@@ -3036,7 +3114,6 @@ public class ODataXmlSerializerTest {
             "                           <a:author>\n" + 
             "                              <a:name />\n" + 
             "                           </a:author>\n" + 
-            "                           <a:link rel=\"edit\" href=\"ESPeople(0)\" />\n" + 
             "                           <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(0)/friends\">\n" + 
             "                              <m:inline>\n" + 
@@ -3063,7 +3140,6 @@ public class ODataXmlSerializerTest {
             "                           <a:author>\n" + 
             "                              <a:name />\n" + 
             "                           </a:author>\n" + 
-            "                           <a:link rel=\"edit\" href=\"ESPeople(3)\" />\n" + 
             "                           <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
             + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(3)/friends\">\n" + 
             "                              <m:inline>\n" + 
@@ -3119,7 +3195,7 @@ public class ODataXmlSerializerTest {
     final ExpandOption expand = ExpandSelectMock.mockExpandOption(Collections.singletonList(
         mockExpandItem));
     long currentTimeMillis = System.currentTimeMillis();
-    InputStream result = serializer.entity(metadata, edmEntitySet.getEntityType(), entity,
+    InputStream result = serializerFullMetadata.entity(metadata, edmEntitySet.getEntityType(), entity,
         EntitySerializerOptions.with()
             .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
             .expand(expand)
@@ -3137,7 +3213,6 @@ public class ODataXmlSerializerTest {
         "  <a:author>\n" + 
         "    <a:name />\n" + 
         "  </a:author>\n" + 
-        "  <a:link rel=\"edit\" href=\"ESPeople(1)\" />\n" + 
         "  <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(1)/friends\">\n" + 
         "    <m:inline>\n" + 
@@ -3150,7 +3225,6 @@ public class ODataXmlSerializerTest {
         "          <a:author>\n" + 
         "            <a:name />\n" + 
         "          </a:author>\n" + 
-        "          <a:link rel=\"edit\" href=\"ESPeople(0)\" />\n" + 
         "          <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(0)/friends\">\n" + 
         "            <m:inline>\n" + 
@@ -3164,7 +3238,6 @@ public class ODataXmlSerializerTest {
         "                  <a:author>\n" + 
         "                    <a:name />\n" + 
         "                  </a:author>\n" + 
-        "                  <a:link rel=\"edit\" href=\"ESPeople(2)\" />\n" + 
         "                  <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\""
         + " title=\"friends\" href=\"ESPeople(2)/friends\">\n" + 
@@ -3179,7 +3252,6 @@ public class ODataXmlSerializerTest {
         "                          <a:author>\n" + 
         "                            <a:name />\n" + 
         "                          </a:author>\n" + 
-        "                          <a:link rel=\"edit\" href=\"ESPeople(3)\" />\n" + 
         "                          <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(3)/friends\" />\n" + 
         "                          <a:category scheme=\"http://docs.oasis-open.org/odata/ns/scheme\" "
@@ -3223,7 +3295,6 @@ public class ODataXmlSerializerTest {
         "          <a:author>\n" + 
         "            <a:name />\n" + 
         "          </a:author>\n" + 
-        "          <a:link rel=\"edit\" href=\"ESPeople(2)\" />\n" + 
         "          <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(2)/friends\">\n" + 
         "            <m:inline>\n" + 
@@ -3236,7 +3307,6 @@ public class ODataXmlSerializerTest {
         "                  <a:author>\n" + 
         "                    <a:name />\n" + 
         "                  </a:author>\n" + 
-        "                  <a:link rel=\"edit\" href=\"ESPeople(0)\" />\n" + 
         "                  <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(0)/friends\">\n" + 
         "                    <m:inline>\n" + 
@@ -3263,7 +3333,6 @@ public class ODataXmlSerializerTest {
         "                  <a:author>\n" + 
         "                    <a:name />\n" + 
         "                  </a:author>\n" + 
-        "                  <a:link rel=\"edit\" href=\"ESPeople(3)\" />\n" + 
         "                  <a:link rel=\"http://docs.oasis-open.org/odata/ns/related/friends\" "
         + "type=\"application/atom+xml;type=feed\" title=\"friends\" href=\"ESPeople(3)/friends\">\n" + 
         "                    <m:inline>\n" + 
@@ -3355,7 +3424,7 @@ public class ODataXmlSerializerTest {
     final SelectItem selectItem = ExpandSelectMock.mockSelectItemForColComplexProperty(resource);
     final SelectOption selectOption = ExpandSelectMock.mockSelectOption(Arrays.asList(selectItem));
     
-    final String resultString = IOUtils.toString(serializer
+    final String resultString = IOUtils.toString(serializerFullMetadata
         .complexCollection(metadata, (EdmComplexType) edmProperty.getType(), property,
             ComplexSerializerOptions.with()
                 .contextURL(ContextURL.with()

@@ -68,17 +68,26 @@ public class ODataImpl extends OData {
   public ODataSerializer createSerializer(final ContentType contentType) throws SerializerException {
     ODataSerializer serializer = null;
 
-    if (contentType != null && contentType.isCompatible(ContentType.APPLICATION_JSON)) {
-      final String metadata = contentType.getParameter(ContentType.PARAMETER_ODATA_METADATA);
-      if (metadata == null
-          || ContentType.VALUE_ODATA_METADATA_MINIMAL.equalsIgnoreCase(metadata)
-          || ContentType.VALUE_ODATA_METADATA_NONE.equalsIgnoreCase(metadata)
-          || ContentType.VALUE_ODATA_METADATA_FULL.equalsIgnoreCase(metadata)) {
-        serializer = new ODataJsonSerializer(contentType, new Constantsv00());
-      }
-    } else if (contentType != null && (contentType.isCompatible(ContentType.APPLICATION_XML)
-        || contentType.isCompatible(ContentType.APPLICATION_ATOM_XML))) {
-      serializer = new ODataXmlSerializer();
+    if (contentType != null) {
+        final String metadata = contentType.getParameter(ContentType.PARAMETER_ODATA_METADATA);
+        if (contentType.isCompatible(ContentType.APPLICATION_JSON)) {
+            if (metadata == null
+                    || ContentType.VALUE_ODATA_METADATA_MINIMAL.equalsIgnoreCase(metadata)
+                    || ContentType.VALUE_ODATA_METADATA_NONE.equalsIgnoreCase(metadata)
+                    || ContentType.VALUE_ODATA_METADATA_FULL.equalsIgnoreCase(metadata)) {
+                serializer = new ODataJsonSerializer(contentType, new Constantsv00());
+            }
+        } else if (contentType.isCompatible(ContentType.APPLICATION_XML)
+                || contentType.isCompatible(ContentType.APPLICATION_ATOM_XML)) {
+            if (metadata == null
+                    || ContentType.VALUE_ODATA_METADATA_MINIMAL.equalsIgnoreCase(metadata)
+                    || ContentType.VALUE_ODATA_METADATA_NONE.equalsIgnoreCase(metadata)
+                    || ContentType.VALUE_ODATA_METADATA_FULL.equalsIgnoreCase(metadata)) {
+            serializer = new ODataXmlSerializer(contentType);
+            } else {
+                serializer = new ODataXmlSerializer();
+            }
+        }
     }
 
     if (serializer == null) {
@@ -109,7 +118,7 @@ public class ODataImpl extends OData {
       }
     } else if (contentType != null && (contentType.isCompatible(ContentType.APPLICATION_XML)
         || contentType.isCompatible(ContentType.APPLICATION_ATOM_XML))) {
-      serializer = new ODataXmlSerializer();
+      serializer = new ODataXmlSerializer(contentType);
     }
 
     if (serializer == null) {
